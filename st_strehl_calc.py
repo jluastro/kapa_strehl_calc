@@ -84,7 +84,9 @@ def calc_performance(user_inputs, grid_inputs):
 #
 ##############################
 
-
+##########
+# Main Page
+##########    
 page_title = 'KAPA Strehl Calculator'
 st.set_page_config(page_title = page_title, page_icon = ":eyeglasses:")
 
@@ -100,6 +102,36 @@ Use the sidebar to set properties of your science target and tip-tilt star.
  5. Click Calculate and your plots will appear below.
 """)
 
+results_cont = st.beta_container()
+
+st.markdown("""
+### About
+
+The KAPA Strehl calculator was developed by the UC Berkeley Moving Universe Lab in collaboration with the
+Keck All-Sky Precision Adaptive Optics (KAPA) Engineering and Science Tools Teams. Authors include:
+Jessica Lu (UC Berkeley), Peter Wizinowich (WMKO), Matthew Freeman (UC Berkeley), Carlos Corriea (WMKO).
+The code development and webpage is funded by the Gordon and Betty Moore Foundation and the National Science
+Foundation. 
+
+**Issues:** If you have found a bug or have a question, please submit an 
+issue on our [GitHub repository](https://github.com/jluastro/kapa_strehl_calc/issues). 
+""")
+
+icon_col1, icon_col2, icon_col3 = st.beta_columns(3)
+
+with icon_col1:
+    st.image('figures/icon_mulab.png', width=100)
+
+with icon_col2:
+    st.image('figures/icon_ucsd_oir.png', width=100)
+
+with icon_col3:
+    st.image('figures/icon_keck.png', width=100)
+
+
+##########
+# Sidebar
+##########    
 st.sidebar.markdown("## Target Parameters")
 
 # Input: Zenith Angle
@@ -173,19 +205,19 @@ if st.sidebar.button('Calculate', key='calc'):
     f.align_ylabels()
 
     # Display the results
-    st.subheader('Results')
+    results_cont.subheader('Results')
 
-    st.pyplot(f)
+    results_cont.pyplot(f)
 
     # Make a data frame for display
     data = {'Filter': filts, 'TT Mag': ttm, 'Strehl': strehl, 'FWHM': fwhm}
     df = pandas.DataFrame(data=data)
-    st.dataframe(data)
+    results_cont.dataframe(data)
 
     # -- Allow data download
     csv = df.to_csv(index=False)
     b64 = base64.b64encode(csv.encode()).decode()  # some strings <-> bytes conversions necessary here
     href = f'<a href="data:file/csv;base64,{b64}">Download Data as CSV File</a>'
-    st.markdown(href, unsafe_allow_html=True)
+    results_cont.markdown(href, unsafe_allow_html=True)
     
     
