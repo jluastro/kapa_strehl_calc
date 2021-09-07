@@ -8,75 +8,11 @@ from astropy import constants as c
 from astropy import table
 from scipy import interpolate as interp
 import time
+import calculations as calc
 
+all_ref_filters = ['V', 'r', 'i', 'J', 'H', 'K']
+all_spec_types = ['K']
 
-def load_data_table():
-    # Setup the tables for our Strehl Calculation
-    # Read in the table of Strehl and FWHM results
-    tab = table.Table.read('strehl_grid.fits')
-
-    # Clean out any bad data.
-    idx = np.where(tab['fwhm'][:, -1] != 0)[0]
-
-    tab = tab[idx]
-
-    # For now, lets also drop the tt_offset >= 21 since that grid point wasn't complete.
-    idx = np.where(tab['tt_offset'] < 21)[0]
-    tab = tab[idx]
-
-    # Sort the table so we ensure that the columns will iterate in the right order.
-    tab.sort(['zenith_angle', 'sci_exp_time', 'tt_offset', 'tt_vmag'])
-
-    return tab
-
-
-def prep_grid(tab):
-    uni_zenith = np.unique(tab['zenith_angle'])
-    uni_s_texp = np.unique(tab['sci_exp_time'])
-    uni_ttvmag = np.unique(tab['tt_vmag'])
-    uni_ttoffs = np.unique(tab['tt_offset'])
-    points = (uni_zenith, uni_s_texp, uni_ttoffs, uni_ttvmag)
-
-    N_za = len(uni_zenith)
-    N_texp = len(uni_s_texp)
-    N_ttv = len(uni_ttvmag)
-    N_tto = len(uni_ttoffs)
-    N_filt = len(tab['strehl'][0, :])
-
-    # gr_za = tab['zenith_angle'].reshape(N_za, N_texp, N_tto, N_ttv)
-    # gr_texp = tab['sci_exp_time'].reshape(N_za, N_texp, N_tto, N_ttv)
-    # gr_ttv = tab['tt_vmag'].reshape(N_za, N_texp, N_tto, N_ttv)
-    # gr_tto = tab['tt_offset'].reshape(N_za, N_texp, N_tto, N_ttv)
-    gr_strehl = tab['strehl'].reshape(N_za, N_texp, N_tto, N_ttv, N_filt)
-    gr_fwhm = tab['fwhm'].reshape(N_za, N_texp, N_tto, N_ttv, N_filt)
-    gr_ttm = tab['tt_mag'].reshape(N_za, N_texp, N_tto, N_ttv, N_filt)
-
-    return points, gr_strehl, gr_fwhm, gr_ttm
-
-
-def calc_performance(user_inputs, grid_inputs):
-    points = grid_inputs[0]
-    gr_strehl = grid_inputs[1]
-    gr_fwhm = grid_inputs[2]
-    gr_ttm = grid_inputs[3]
-
-    N_filt = gr_strehl.shape[4]
-    
-    out_strehl = np.zeros(N_filt, dtype=float)
-    out_fwhm = np.zeros(N_filt, dtype=float)
-    out_ttm = np.zeros(N_filt, dtype=float)
-
-    for ff in range(N_filt):
-        int_strehl = interp.RegularGridInterpolator(points, gr_strehl[:, :, :, :, ff], method='linear', bounds_error=False)
-        int_fwhm = interp.RegularGridInterpolator(points, gr_fwhm[:, :, :, :, ff], method='linear', bounds_error=False)
-        int_ttm = interp.RegularGridInterpolator(points, gr_ttm[:, :, :, :, ff], method='linear', bounds_error=False)
-        
-    
-        out_strehl[ff] = int_strehl(user_inputs)
-        out_fwhm[ff] = int_fwhm(user_inputs)
-        out_ttm[ff] = int_ttm(user_inputs)
-
-    return out_strehl, out_fwhm, out_ttm
 
 ##############################
 #
@@ -96,10 +32,13 @@ st.markdown("""
 Use the sidebar to set properties of your science target and tip-tilt star.
 
  1. Set the zenith angle of your science target in degrees.
- 2. Set the V-band of your tip-tilt star (Current Assumptions: TT sensing at R-band and TT spectral type is K-type).
- 3. Set the distance between the tip-tilt star and the science tareget, which is assumed to be at the center of the LGS constellation.
- 4. Set the individual science exposure times. The PSF is blurred for longer exposures. 
- 5. Click Calculate and your plots will appear below.
+ 2. Set the individual science exposure times. The PSF is blurred for longer exposures. 
+ 3. Set the magnitude of your tip-tilt star in a reference filter.
+ 4. Set the the reference filter for your tip-tilt star magnitude (Choices: V, r, i, J, H, K).
+ 5. Set the distance between the tip-tilt star and the science tareget, which is assumed to be at the center of the LGS constellation.
+ 6. Click Calculate and your plots will appear below.
+
+NOTE: If the plots are empty, you may be requesting values outside the currently available grid. Please alert Jessica Lu (jlu.astro@berkeley.edu) and include the desired values.
 """)
 
 results_cont = st.beta_container()
@@ -137,30 +76,38 @@ st.sidebar.markdown("## Target Parameters")
 # Input: Zenith Angle
 in_za = st.sidebar.number_input('Zenith Angle (deg) -- range: [0 - 50]',
                             min_value=0, max_value=50, value=30, key='in_za')
-# Input: Tip-Tilt V Mag
-in_ttv = st.sidebar.number_input('TT Star V-band Brightness (mag) -- range: [9 - 19]',
-                             min_value=9, max_value=20, value=10, key='in_ttv')
-# Input: Tip-Tilt Offset
-in_tto = st.sidebar.number_input('TT Star Offset (asec) -- range: [0 - 20]',
-                             min_value=0, max_value=20, value=0, key='in_tto')
+
 # Input: Science Exposure Integration Time
 in_texp = st.sidebar.number_input('Science Exposure Time (sec) - range: [30, 900]',
                               min_value=30, max_value=900, value=30, key='in_texp')
 
+# Input: Tip-Tilt Mag in Reference Filter
+in_tt_ref_mag = st.sidebar.number_input('TT Brightness in Reference Filter (mag)',
+                            min_value=6, max_value=20, value=10, key='in_tt_ref_mag')
+
+# Input: TT Reference Band
+in_tt_ref_filt = st.sidebar.selectbox('TT Reference Filter', all_ref_filters,
+                                          key='in_tt_ref_filt')
+
 # Input: Spectral Type of TT star - used for converting from V-band to TT WFS band
 # add OBAFGKM in the future.
-in_tt_type = st.sidebar.selectbox('TT Spectral Type', ['K'])
+in_tt_type = st.sidebar.selectbox('TT Spectral Type', ['K'], key='in_tt_ref_type')
 
-# Input: TT wavefront sensing band-pass -- add JH and K in the future
+# Input: TT wavefront sensing band-pass -- add J,H and K in the future
 in_tt_band = st.sidebar.radio('TT Sensing Band', ['R']) 
+
+# Input: Tip-Tilt Offset
+in_tto = st.sidebar.number_input('TT Star Offset (asec) -- range: [0 - 60]',
+                             min_value=0, max_value=60, value=0, key='in_tto')
+
 
 ####################
 # Prep Data
 ####################
 
-tab = load_data_table()
+tab = calc.load_data_tables()
 
-grid_inputs = prep_grid(tab)
+grid_inputs = calc.prep_grid(tab)
 
 
 ####################
@@ -168,24 +115,24 @@ grid_inputs = prep_grid(tab)
 ####################
 if st.sidebar.button('Calculate', key='calc'):
     # perform the interpolation
-    user_inputs = np.array([in_za, in_texp, in_tto, in_ttv])
-    strehl, fwhm, ttm = calc_performance(user_inputs, grid_inputs)
+    user_inputs = np.array([in_za, in_texp, in_tto, in_tt_ref_mag, in_tt_ref_filt, in_tt_type, in_tt_band])
+    strehl, fwhm, ttm = calc.calc_performance(user_inputs, grid_inputs)
 
     filts = np.array(['Y', 'Z', 'J', 'H', 'K'])
 
     f, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True, figsize=(5, 6))
     plt.subplots_adjust(hspace=0.07, top=0.84)
 
-    fmt1 = "TT: V={0:.1f} mag"
-    fmt2 = 'TT Offset from Target: {0:.1f}"'
-    fmt3 = 'Science Exposure Time: {0:.0f} sec'
-    fmt4 = 'Zenith Angle: {0:.0f} deg'
+    fmt1 = 'Science Exposure Time: {0:.0f} sec'
+    fmt2 = 'Zenith Angle: {0:.0f} deg'
+    fmt3 = "TT: {0:s} = {1:.1f} mag (spec-type = {2:s})"
+    fmt4 = 'TT Offset from Target: {0:.1f}"'
     dy = 0.03
     
-    plt.figtext(0.2, 0.95 - 0*dy, fmt4.format(in_za), fontsize=10)
-    plt.figtext(0.2, 0.95 - 1*dy, fmt1.format(in_ttv), fontsize=10)
-    plt.figtext(0.2, 0.95 - 2*dy, fmt2.format(in_tto), fontsize=10)
-    plt.figtext(0.2, 0.95 - 3*dy, fmt3.format(in_texp), fontsize=10)
+    plt.figtext(0.2, 0.95 - 0*dy, fmt1.format(in_za), fontsize=10)
+    plt.figtext(0.2, 0.95 - 1*dy, fmt2.format(in_texp), fontsize=10)
+    plt.figtext(0.2, 0.95 - 2*dy, fmt3.format(in_tt_ref_filt, in_tt_ref_mag, in_tt_type), fontsize=10)
+    plt.figtext(0.2, 0.95 - 3*dy, fmt4.format(in_tto), fontsize=10)
 
     ax1.plot(filts, ttm, 'b.--', ms=10)
     ax1.invert_yaxis()
