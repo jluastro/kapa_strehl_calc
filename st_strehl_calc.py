@@ -118,7 +118,7 @@ if st.sidebar.button('Calculate', key='calc'):
     user_inputs = np.array([in_za, in_texp, in_tto, in_tt_ref_mag, in_tt_ref_filt, in_tt_type, in_tt_band])
     strehl, fwhm, ttm = calc.calc_performance(user_inputs, grid_inputs)
 
-    filts = np.array(['Y', 'Z', 'J', 'H', 'K'])
+    filts = np.array(['Z', 'Y', 'J', 'H', 'K'])
 
     f, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True, figsize=(5, 6))
     plt.subplots_adjust(hspace=0.07, top=0.84)
@@ -129,8 +129,8 @@ if st.sidebar.button('Calculate', key='calc'):
     fmt4 = 'TT Offset from Target: {0:.1f}"'
     dy = 0.03
     
-    plt.figtext(0.2, 0.95 - 0*dy, fmt1.format(in_za), fontsize=10)
-    plt.figtext(0.2, 0.95 - 1*dy, fmt2.format(in_texp), fontsize=10)
+    plt.figtext(0.2, 0.95 - 0*dy, fmt1.format(in_texp), fontsize=10)
+    plt.figtext(0.2, 0.95 - 1*dy, fmt2.format(in_za), fontsize=10)
     plt.figtext(0.2, 0.95 - 2*dy, fmt3.format(in_tt_ref_filt, in_tt_ref_mag, in_tt_type), fontsize=10)
     plt.figtext(0.2, 0.95 - 3*dy, fmt4.format(in_tto), fontsize=10)
 
